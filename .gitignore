@@ -1,0 +1,28 @@
+# Build and release outputs
+artifacts/
+dist/
+*.exe
+*.pdb
+*.zip
+*.zip.sha256.txt
+SHA256SUMS*.txt
+
+# Runtime and shortcut state
+*.log
+*.lnk
+shortcuts.json
+backups/
+.staging-*/
+.rollback-*/
+
+# Editors and operating systems
+.vs/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+
+# Scratch files
+work/
+*.tmp

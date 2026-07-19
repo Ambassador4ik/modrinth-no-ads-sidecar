@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/Ambassador4ik/modrinth-no-ads-sidecar/security/advisories/new
+    about: Report vulnerabilities, credentials exposure, or unsafe behavior privately.
+  - name: Modrinth support
+    url: https://support.modrinth.com/
+    about: Ask Rinth about the official App, account, billing, or service.

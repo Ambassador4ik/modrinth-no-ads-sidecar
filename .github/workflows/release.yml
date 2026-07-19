@@ -1,0 +1,134 @@
+name: Tagged Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, test, and attest
+    runs-on: windows-2025
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release tag and ancestry
+        shell: powershell
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Release tag must be vX.Y.Z: $env:RELEASE_TAG"
+          }
+          $version = (Get-Content -LiteralPath .\VERSION -Raw).Trim()
+          if ($env:RELEASE_TAG -ne "v$version") {
+            throw "Tag $env:RELEASE_TAG does not match VERSION $version."
+          }
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not fetch origin/main.'
+          }
+          git merge-base --is-ancestor $env:RELEASE_SHA origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Release tag is not on the main branch history.'
+          }
+
+      - name: Validate repository
+        shell: powershell
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-Repository.ps1
+
+      - name: Build and package
+        shell: powershell
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\New-ReleasePackage.ps1
+
+      - name: Verify extracted release and shortcut lifecycle
+        shell: powershell
+        run: |
+          $version = (Get-Content -LiteralPath .\VERSION -Raw).Trim()
+          $zip = ".\dist\ModrinthNoAdsSidecar-v$version-windows.zip"
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\tests\Verify-ReleasePackage.ps1 -ZipPath $zip -ExpectedVersion $version
+
+      - name: Attest release assets
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: 'dist/*'
+
+      - name: Upload exact release assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: windows-2025
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      attestations: read
+
+    steps:
+      - name: Download attested assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets
+          path: dist
+
+      - name: Reverify ZIP checksum
+        shell: powershell
+        run: |
+          $checksum = Get-ChildItem -LiteralPath .\dist -Filter '*.zip.sha256.txt' -File
+          $zip = Get-ChildItem -LiteralPath .\dist -Filter '*.zip' -File
+          if (@($checksum).Count -ne 1 -or @($zip).Count -ne 1) {
+            throw 'Expected exactly one ZIP and one checksum file.'
+          }
+          $line = (Get-Content -LiteralPath $checksum.FullName -Raw).Trim()
+          if ($line -notmatch '^([0-9A-Fa-f]{64})  ([^\\/]+\.zip)$') {
+            throw 'Checksum file format is invalid.'
+          }
+          if ($Matches[2] -ne $zip.Name) {
+            throw 'Checksum names a different ZIP.'
+          }
+          if ((Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256).Hash -ne $Matches[1].ToUpperInvariant()) {
+            throw 'ZIP checksum mismatch after artifact transfer.'
+          }
+
+      - name: Verify GitHub build attestation
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $zip = Get-ChildItem -LiteralPath .\dist -Filter '*.zip' -File
+          gh attestation verify $zip.FullName --repo $env:GH_REPO
+
+      - name: Create GitHub Release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $assets = @(Get-ChildItem -LiteralPath .\dist -File | ForEach-Object { $_.FullName })
+          gh release create $env:RELEASE_TAG $assets --verify-tag --generate-notes --title $env:RELEASE_TAG

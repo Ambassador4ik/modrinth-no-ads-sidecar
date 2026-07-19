@@ -1,0 +1,72 @@
+name: Bug report
+description: Report a reproducible sidecar or shortcut-integration defect.
+title: '[Bug] '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste raw logs, tokens, cookies, usernames, or shortcut backups.
+        Use private vulnerability reporting for security issues.
+  - type: input
+    id: sidecar-version
+    attributes:
+      label: Sidecar version
+      placeholder: 1.2.0
+    validations:
+      required: true
+  - type: input
+    id: modrinth-version
+    attributes:
+      label: Modrinth App version
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version and architecture
+      placeholder: Windows 11 24H2 x64
+    validations:
+      required: true
+  - type: dropdown
+    id: integration
+    attributes:
+      label: Launch method
+      options:
+        - Patched current-user shortcut
+        - Separate unofficial shortcut
+        - Visible console sidecar
+        - Attach-only mode
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use minimal steps and redact personal data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I ran the latest release's `--self-test`.
+          required: true
+        - label: I removed usernames, paths, URLs, tokens, cookies, and other personal data.
+          required: true
+        - label: This is not a confidential security report.
+          required: true

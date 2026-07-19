@@ -1,0 +1,56 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Windows ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2022
+          - windows-2025
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate repository
+        shell: powershell
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\tests\Test-Repository.ps1
+
+      - name: Build
+        shell: powershell
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
+
+      - name: Verify binaries
+        shell: powershell
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\tests\Verify-Build.ps1 -BinaryDirectory .\artifacts\bin
+
+      - name: Create release package
+        shell: powershell
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\scripts\New-ReleasePackage.ps1 -SkipBuild
+
+      - name: Verify extracted release and shortcut lifecycle
+        shell: powershell
+        run: |
+          $version = (Get-Content -LiteralPath .\VERSION -Raw).Trim()
+          $zip = ".\dist\ModrinthNoAdsSidecar-v$version-windows.zip"
+          powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\tests\Verify-ReleasePackage.ps1 -ZipPath $zip -ExpectedVersion $version
